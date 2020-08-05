@@ -3,5 +3,5 @@ Module for utile functions
 '''
 
 def color(r,g,b):
-	return bytes([b, g, r])
+	return bytes([int(b * 255), int(g * 255), int(r*255)])
 

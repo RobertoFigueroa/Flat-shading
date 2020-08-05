@@ -12,9 +12,7 @@ class Obj(object):
 
         self.read()
 
-        for face in self.vertices:
-            print(face)
-
+        
     def read(self):
         for line in self.lines:
             if line:

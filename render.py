@@ -5,12 +5,79 @@ from collections import namedtuple
 
 
 BLACK = color(0, 0, 0)
-WHITE = color(255, 255, 255)
-RED = color(255, 0, 0)
+WHITE = color(1, 1, 1)
+RED = color(1, 0, 0)
 
 V2 = namedtuple('Point2', ['x', 'y'])
 V3 = namedtuple('Point3', ['x', 'y', 'z'])
 V4 = namedtuple('Point4', ['x', 'y', 'z','w'])
+
+
+def sum(v0, v1):
+    """
+        Input: 2 size 3 vectors
+        Output: Size 3 vector with the per element sum
+    """
+    return V3(v0.x + v1.x, v0.y + v1.y, v0.z + v1.z)
+
+def sub(v0, v1):
+    """
+        Input: 2 size 3 vectors
+        Output: Size 3 vector with the per element substraction
+    """
+    return V3(v0.x - v1.x, v0.y - v1.y, v0.z - v1.z)
+
+def mul(v0, k):
+    """
+        Input: 2 size 3 vectors
+        Output: Size 3 vector with the per element multiplication
+    """
+    return V3(v0.x * k, v0.y * k, v0.z *k)
+
+def dot(v0, v1):
+    return v0.x * v1.x + v0.y * v1.y + v0.z * v1.z
+	
+def length(v0):
+    """
+        Input: 1 size 3 vector
+        Output: Scalar with the length of the vector
+    """  
+    return (v0.x**2 + v0.y**2 + v0.z**2)**0.5
+
+
+def norm(v0):
+    """
+        Input: 1 size 3 vector
+        Output: Size 3 vector with the normal of the vector
+    """  
+    v0length = length(v0)
+
+    if not v0length:
+        return V3(0, 0, 0)
+
+    return V3(v0.x/v0length, v0.y/v0length, v0.z/v0length)
+
+
+def bbox(*vertices):
+    xs = [ vertex.x for vertex in vertices ]
+    ys = [ vertex.y for vertex in vertices ]
+
+    xs.sort()
+    ys.sort()
+
+    xmin = xs[0]
+    xmax = xs[-1]
+    ymin = ys[0]
+    ymax = ys[-1]
+
+    return xmin, xmax, ymin, ymax
+
+def cross(v1, v2):
+    return V3(
+        v1.y * v2.z - v1.z * v2.y,
+        v1.z * v2.x - v1.x * v2.z,
+        v1.x * v2.y - v1.y * v2.x,
+    )
 
 def baryCoords(A, B, C, P):
     # u es para la A, v es para B, w para C
@@ -80,7 +147,7 @@ class Render(object):
 			self.framebuffer[y][x] = color or self.curr_color
 		except:
 			pass
-		
+
 	def glColor(self, r, g, b):
 		self.curr_color = color(round(r * 255), round(g * 255), round(b * 255))
 
@@ -299,9 +366,9 @@ class Render(object):
 					vt2 = V2(0,0) 
 					vt3 = V2(0,0) 
 
-				normal = np.cross(np.subtract(v1,v0), np.subtract(v2,v0))
-				normal = normal / np.linalg.norm(normal)
-				intensity = np.dot(normal, light)
+				normal = cross(sub(V3(v1.x,v1.y,v1.z),V3(v0.x,v0.y,v0.z)), sub(V3(v2.x,v2.y,v2.z),V3(v0.x,v0.y,v0.z)))
+				normal = norm(normal)
+				intensity = dot(normal, light)
 
 				if intensity >=0:
 					self.triangle_bc(v0,v1,v2, texture = texture, texcoords = (vt0,vt1,vt2), intensity = intensity )
