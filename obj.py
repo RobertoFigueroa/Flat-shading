@@ -19,11 +19,11 @@ class Obj(object):
                 prefix, value = line.split(' ', 1)
 
                 if prefix == 'v': # vertices
-                    self.vertices.append(list(map(float,value.split(' '))))
+                    self.vertices.append(list(map(float,value.split())))
                 elif prefix == 'vn': #normal
-                    self.normals.append(list(map(float,value.split(' '))))
+                    self.normals.append(list(map(float,value.split())))
                 elif prefix == 'vt': #textura
-                    self.texcoords.append(list(map(float,value.split(' '))))
+                    self.texcoords.append(list(map(float,value.split())))
                 elif prefix == 'f': #faces
                     faceLine = []
                     for vert in value.split(' '):
