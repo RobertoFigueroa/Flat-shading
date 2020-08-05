@@ -13,3 +13,4 @@ my_bmp_file.glClear()
 my_bmp_file.loadModel('./models/hand.obj', V3(375,500,0), V3(50,50,50))
 
 my_bmp_file.glFinish('polygons.bmp')
+my_bmp_file.glZBuffer('shades.bmp')
