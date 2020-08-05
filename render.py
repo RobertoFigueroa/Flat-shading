@@ -1,12 +1,31 @@
 from data_types_module import dword, word, char
 from utils import color
 from obj import Obj
+from collections import namedtuple
 
 
 BLACK = color(0, 0, 0)
 WHITE = color(255, 255, 255)
 RED = color(255, 0, 0)
 
+V2 = namedtuple('Point2', ['x', 'y'])
+V3 = namedtuple('Point3', ['x', 'y', 'z'])
+V4 = namedtuple('Point4', ['x', 'y', 'z','w'])
+
+def baryCoords(A, B, C, P):
+    # u es para la A, v es para B, w para C
+    try:
+        u = ( ((B.y - C.y)*(P.x - C.x) + (C.x - B.x)*(P.y - C.y) ) /
+              ((B.y - C.y)*(A.x - C.x) + (C.x - B.x)*(A.y - C.y)) )
+
+        v = ( ((C.y - A.y)*(P.x - C.x) + (A.x - C.x)*(P.y - C.y) ) /
+              ((B.y - C.y)*(A.x - C.x) + (C.x - B.x)*(A.y - C.y)) )
+
+        w = 1 - u - v
+    except:
+        return -1, -1, -1
+
+    return u, v, w
 
 class Render(object):
 
@@ -32,6 +51,10 @@ class Render(object):
 	def glClear(self):
 		self.framebuffer = [[BLACK for x in range(
 		    self.width)] for y in range(self.height)]
+		
+		#Zbuffer (buffer de profundidad)
+		self.zbuffer = [ [ -float('inf') for x in range(self.width)] for y in range(self.height) ]
+		
 
 	def glClearColor(self, r, g, b):
 		clearColor = color(
@@ -50,9 +73,14 @@ class Render(object):
 		self.point(X, Y)
 		
 
-	def glVertex_coord(self, x, y):
-		self.framebuffer[y][x] = self.curr_color
-
+	def glVertex_coord(self, x, y, color= None):
+		if x >= self.width or x < 0 or y >= self.height or y < 0:
+			return
+		try:
+			self.framebuffer[y][x] = color or self.curr_color
+		except:
+			pass
+		
 	def glColor(self, r, g, b):
 		self.curr_color = color(round(r * 255), round(g * 255), round(b * 255))
 
@@ -217,24 +245,68 @@ class Render(object):
 					y += 1 if y0 < y1 else -1
 					limit += 1
 
-	def loadModel(self, filename, translate, scale):
+	def transform(self, vertex, translate=V3(0,0,0), scale=V3(1,1,1)):
+		return V3(round(vertex[0] * scale.x + translate.x),round(vertex[1] * scale.y + translate.y),round(vertex[2] * scale.z + translate.z))
+
+
+	def loadModel(self, filename, translate=V3(0,0,0), scale=V3(1,1,1), texture = None, isWireframe = False):
 		model = Obj(filename)
+
+		light = V3(0,0,1)
 
 		for face in model.faces:
 
 			vertCount = len(face)
 
-			for vert in range(vertCount):
-				
-				v0 = model.vertices[ face[vert][0] - 1 ]
-				v1 = model.vertices[ face[(vert + 1) % vertCount][0] - 1]
+			if isWireframe:
+				for vert in range(vertCount):
+					
+					v0 = model.vertices[ face[vert][0] - 1 ]
+					v1 = model.vertices[ face[(vert + 1) % vertCount][0] - 1]
 
-				x0 = round(v0[0] * scale[0]  + translate[0])
-				y0 = round(v0[1] * scale[1]  + translate[1])
-				x1 = round(v1[0] * scale[0]  + translate[0])
-				y1 = round(v1[1] * scale[1]  + translate[1])
+					x0 = round(v0[0] * scale[0]  + translate[0])
+					y0 = round(v0[1] * scale[1]  + translate[1])
+					x1 = round(v1[0] * scale[0]  + translate[0])
+					y1 = round(v1[1] * scale[1]  + translate[1])
 
-				self.glLine_coord(x0, y0, x1, y1)
+					self.glLine_coord(x0, y0, x1, y1)
+			else:
+				v0 = model.vertices[ face[0][0] - 1 ]
+				v1 = model.vertices[ face[1][0] - 1 ]
+				v2 = model.vertices[ face[2][0] - 1 ]
+				if vertCount > 3:
+					v3 = model.vertices[ face[3][0] - 1 ]
+
+				v0 = self.transform(v0,translate, scale)
+				v1 = self.transform(v1,translate, scale)
+				v2 = self.transform(v2,translate, scale)
+				if vertCount > 3:
+					v3 = self.transform(v3,translate, scale)
+
+				if texture:
+					vt0 = model.texcoords[face[0][1] - 1]
+					vt1 = model.texcoords[face[1][1] - 1]
+					vt2 = model.texcoords[face[2][1] - 1]
+					vt0 = V2(vt0[0], vt0[1])
+					vt1 = V2(vt1[0], vt1[1])
+					vt2 = V2(vt2[0], vt2[1])
+					if vertCount > 3:
+						vt3 = model.texcoords[face[3][1] - 1]
+						vt3 = V2(vt3[0], vt3[1])
+				else:
+					vt0 = V2(0,0) 
+					vt1 = V2(0,0) 
+					vt2 = V2(0,0) 
+					vt3 = V2(0,0) 
+
+				normal = np.cross(np.subtract(v1,v0), np.subtract(v2,v0))
+				normal = normal / np.linalg.norm(normal)
+				intensity = np.dot(normal, light)
+
+				if intensity >=0:
+					self.triangle_bc(v0,v1,v2, texture = texture, texcoords = (vt0,vt1,vt2), intensity = intensity )
+					if vertCount > 3: #asumamos que 4, un cuadrado
+						self.triangle_bc(v0,v2,v3, texture = texture, texcoords = (vt0,vt2,vt3), intensity = intensity)
 
 	def drawPolygons(self, points):
 		
@@ -272,3 +344,139 @@ class Render(object):
 				if self.is_point_in_path(x,y,poly):
 					self.framebuffer[y][x] = color
 		
+	def glZBuffer(self, filename):
+		archivo = open(filename, 'wb')
+
+		# File header 14 bytes
+		archivo.write(bytes('B'.encode('ascii')))
+		archivo.write(bytes('M'.encode('ascii')))
+		archivo.write(dword(14 + 40 + self.width * self.height * 3))
+		archivo.write(dword(0))
+		archivo.write(dword(14 + 40))
+
+		# Image Header 40 bytes
+		archivo.write(dword(40))
+		archivo.write(dword(self.width))
+		archivo.write(dword(self.height))
+		archivo.write(word(1))
+		archivo.write(word(24))
+		archivo.write(dword(0))
+		archivo.write(dword(self.width * self.height * 3))
+		archivo.write(dword(0))
+		archivo.write(dword(0))
+		archivo.write(dword(0))
+		archivo.write(dword(0))
+
+		# Minimo y el maximo
+		minZ = float('inf')
+		maxZ = -float('inf')
+		for x in range(self.height):
+			for y in range(self.width):
+				if self.zbuffer[x][y] != -float('inf'):
+					if self.zbuffer[x][y] < minZ:
+						minZ = self.zbuffer[x][y]
+
+					if self.zbuffer[x][y] > maxZ:
+						maxZ = self.zbuffer[x][y]
+
+		for x in range(self.height):
+			for y in range(self.width):
+				depth = self.zbuffer[x][y]
+				if depth == -float('inf'):
+					depth = minZ
+				depth = (depth - minZ) / (maxZ - minZ)
+				archivo.write(color(depth,depth,depth))
+
+		archivo.close()
+
+
+	def triangle(self, A, B, C, color = None):
+        
+		def flatBottomTriangle(v1,v2,v3):
+            #self.drawPoly([v1,v2,v3], color)
+			for y in range(v1.y, v3.y + 1):
+				xi = round( v1.x + (v3.x - v1.x)/(v3.y - v1.y) * (y - v1.y))
+				xf = round( v2.x + (v3.x - v2.x)/(v3.y - v2.y) * (y - v2.y))
+
+				if xi > xf:
+					xi, xf = xf, xi
+
+				for x in range(xi, xf + 1):
+					self.glVertex_coord(x,y, color or self.curr_color)
+
+		def flatTopTriangle(v1,v2,v3):
+			for y in range(v1.y, v3.y + 1):
+				xi = round( v2.x + (v2.x - v1.x)/(v2.y - v1.y) * (y - v2.y))
+				xf = round( v3.x + (v3.x - v1.x)/(v3.y - v1.y) * (y - v3.y))
+
+				if xi > xf:
+					xi, xf = xf, xi
+
+				for x in range(xi, xf + 1):
+					self.glVertex_coord(x,y, color or self.curr_color)
+
+        # A.y <= B.y <= Cy
+		if A.y > B.y:
+			A, B = B, A
+		if A.y > C.y:
+			A, C = C, A
+		if B.y > C.y:
+			B, C = C, B
+
+		if A.y == C.y:
+			return
+
+		if A.y == B.y: #En caso de la parte de abajo sea plana
+			flatBottomTriangle(A,B,C)
+		elif B.y == C.y: #En caso de que la parte de arriba sea plana
+			flatTopTriangle(A,B,C)
+		else: #En cualquier otro caso
+			# y - y1 = m * (x - x1)
+			# B.y - A.y = (C.y - A.y)/(C.x - A.x) * (D.x - A.x)
+			# Resolviendo para D.x
+			x4 = A.x + (C.x - A.x)/(C.y - A.y) * (B.y - A.y)
+			D = V2( round(x4), B.y)
+			flatBottomTriangle(D,B,C)
+			flatTopTriangle(A,B,D)
+
+    #Barycentric Coordinates
+	def triangle_bc(self, A, B, C, _color = WHITE, texture = None, texcoords = (), intensity = 1):
+		#bounding box
+		minX = min(A.x, B.x, C.x)
+		minY = min(A.y, B.y, C.y)
+		maxX = max(A.x, B.x, C.x)
+		maxY = max(A.y, B.y, C.y)
+
+		for x in range(minX, maxX + 1):
+			for y in range(minY, maxY + 1):
+				if x >= self.width or x < 0 or y >= self.height or y < 0:
+					continue
+
+				u, v, w = baryCoords(A, B, C, V2(x, y))
+
+				if u >= 0 and v >= 0 and w >= 0:
+
+					z = A.z * u + B.z * v + C.z * w
+					if z > self.zbuffer[y][x]:
+						
+						b, g , r = _color
+						b /= 255
+						g /= 255
+						r /= 255
+
+						b *= intensity
+						g *= intensity
+						r *= intensity
+
+						if texture:
+							ta, tb, tc = texcoords
+							tx = ta.x * u + tb.x * v + tc.x * w
+							ty = ta.y * u + tb.y * v + tc.y * w
+
+							texColor = texture.getColor(tx, ty)
+							b *= texColor[0] / 255
+							g *= texColor[1] / 255
+							r *= texColor[2] / 255
+
+						self.glVertex_coord(x, y, color(r,g,b))
+						self.zbuffer[y][x] = z
